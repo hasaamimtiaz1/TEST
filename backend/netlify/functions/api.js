@@ -7,10 +7,15 @@ let connectionPromise = null;
 function connectDB() {
   if (mongoose.connection.readyState === 1) return Promise.resolve();
   if (!connectionPromise) {
-    connectionPromise = mongoose.connect(process.env.MONGODB_URI).catch((err) => {
-      connectionPromise = null;
-      throw err;
-    });
+    connectionPromise = mongoose
+      .connect(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 8000,
+        bufferCommands: false,
+      })
+      .catch((err) => {
+        connectionPromise = null;
+        throw err;
+      });
   }
   return connectionPromise;
 }
@@ -19,7 +24,17 @@ const expressHandler = serverless(app);
 
 module.exports.handler = async (event, context) => {
   context.callbackWaitsForEmptyEventLoop = false;
-  await connectDB();
+
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('DB connection failed:', err);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ message: 'Database connection failed', error: err.message }),
+      headers: { 'Content-Type': 'application/json' },
+    };
+  }
 
   event.path = event.path.replace('/.netlify/functions/api', '/api');
   return expressHandler(event, context);
