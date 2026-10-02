@@ -3,9 +3,11 @@
 A simple CRUD (Create, Read, Update, Delete) task manager.
 
 - **Frontend**: Angular 19 (standalone components) — `frontend/`
-- **Backend**: Node.js + Express + Mongoose — `backend/`
+- **Backend**: Node.js + Express + Mongoose — `backend/` (runs as a plain server locally, and as a Netlify serverless function in production)
 - **Database**: MongoDB Atlas (free tier)
-- **Deploy**: Frontend → Netlify (free) · Backend → Render (free) · DB → MongoDB Atlas (free)
+- **Deploy**: Both frontend and backend deploy together to **Netlify** (free, no card required) — the Express API runs as a Netlify Function at `/api/*`, same origin as the frontend, so there's no CORS to configure in production · DB → MongoDB Atlas (free)
+
+> We originally planned to host the backend on Render, but Render now requires a card even for its free tier. Netlify Functions avoids that entirely and keeps everything on one free account.
 
 Node.js v22.14.0 was installed locally into `~/.local/node-v22.14.0-darwin-arm64` and added to your `PATH` in `~/.zshrc` (open a new terminal tab, or run `source ~/.zshrc`, to pick it up).
 
@@ -54,9 +56,7 @@ Visit http://localhost:4200 — you should see the Task Manager UI, able to crea
 
 ## 2. Push the code to GitHub
 
-Both Render and Netlify deploy by connecting to a GitHub repo.
-
-> **Prerequisite**: `git` isn't installed on this machine yet (it ships with Xcode Command Line Tools). Run `xcode-select --install`, click **Install** in the dialog that pops up, and wait for it to finish (~5-10 min) before continuing. This is a one-time, one-click step only you can do — it can't be done headlessly.
+Netlify deploys by connecting to a GitHub repo.
 
 ```bash
 cd /Users/hasaam/Documents/Project
@@ -75,52 +75,48 @@ git push -u origin main
 
 ---
 
-## 3. Deploy the backend (Render — free)
+## 3. Deploy to Netlify (frontend + backend, one site, free, no card)
 
-1. Go to https://render.com and sign up / log in (you can sign in with GitHub).
-2. **New** → **Web Service** → connect your GitHub repo.
-3. Configure:
-   - **Root Directory**: `backend`
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-   - **Instance Type**: Free
-4. Add environment variables (Render dashboard → Environment):
-   - `MONGODB_URI` = your Atlas connection string
-   - `CORS_ORIGIN` = your future Netlify URL (you can update this after step 4, e.g. `https://your-app.netlify.app`)
-   - `PORT` = `5050` (Render sets its own `PORT` env var automatically and Express already reads `process.env.PORT`, so this is just a fallback)
-5. Deploy. Render gives you a URL like `https://your-backend.onrender.com`.
-6. Test it: visit `https://your-backend.onrender.com/api/health`.
+The repo root has a `netlify.toml` that builds the Angular frontend AND bundles the Express backend (`backend/netlify/functions/api.js`) as a serverless function, in one deploy:
 
-> Free Render web services spin down after inactivity and take ~30-60s to wake up on the next request — normal for the free tier.
+```toml
+[build]
+  command = "npm install --prefix frontend && npm run build --prefix frontend && npm install --prefix backend"
+  publish = "frontend/dist/frontend/browser"
 
----
+[functions]
+  directory = "backend/netlify/functions"
 
-## 4. Deploy the frontend (Netlify — free)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
 
-Netlify works fine for an Angular static build. `frontend/netlify.toml` is already set up with the build command, publish directory, and an SPA redirect rule (needed so routes like `/tasks/123/edit` don't 404 on refresh).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
 
-1. Update `frontend/src/environments/environment.prod.ts` with your real Render URL:
-   ```ts
-   export const environment = {
-     production: true,
-     apiUrl: 'https://your-backend.onrender.com/api',
-   };
-   ```
-   Commit and push this change.
-2. Go to https://app.netlify.com and sign up / log in with GitHub.
-3. **Add new site** → **Import an existing project** → connect GitHub → pick your repo.
-4. Configure:
-   - **Base directory**: `frontend`
-   - **Build command**: `npm run build` (auto-filled from `netlify.toml`)
-   - **Publish directory**: `frontend/dist/frontend/browser` (auto-filled from `netlify.toml`)
-5. Deploy. Netlify gives you a URL like `https://your-app.netlify.app` (you can rename this in Site settings → Domain management).
-6. Go back to Render and update the backend's `CORS_ORIGIN` env var to this exact Netlify URL, then redeploy the backend (or it will reject requests from the frontend due to CORS).
+Steps:
+
+1. Go to https://app.netlify.com and sign up / log in with GitHub (no card required for this).
+2. **Add new site** → **Import an existing project** → connect GitHub → pick your repo.
+3. Netlify should auto-read the build settings from `netlify.toml` (base directory, build command, publish directory, functions directory) — just confirm and continue.
+4. Before/after the first deploy, add an environment variable (Site configuration → Environment variables):
+   - `MONGODB_URI` = your Atlas connection string (same one in your local `backend/.env`)
+5. Deploy (or redeploy, if you added the env var after the first deploy — Deploys → Trigger deploy). Netlify gives you a URL like `https://your-app.netlify.app`.
+6. Test the API directly: visit `https://your-app.netlify.app/api/health` → should show `{"status":"ok"}`.
+
+No `CORS_ORIGIN` env var is needed in production — the frontend and API are served from the same Netlify domain, so there's no cross-origin request at all. (`CORS_ORIGIN` in your local `.env` is still used by `cors()` for local dev, where the Angular dev server on port 4200 calls the API on port 5050.)
+
+> Netlify Functions have a free-tier usage limit (125k invocations/month, 100 hours of runtime) — more than enough for a demo/portfolio app.
 
 ---
 
-## 5. Verify end to end
+## 4. Verify end to end
 
-Visit your Netlify URL. Create, edit, complete, and delete a task — it should call your Render backend, which reads/writes MongoDB Atlas. Everything is free tier.
+Visit your Netlify URL. Create, edit, complete, and delete a task — it calls the Netlify Function at `/api/*`, which reads/writes MongoDB Atlas. Everything is free, no card anywhere.
 
 ---
 
@@ -128,15 +124,18 @@ Visit your Netlify URL. Create, edit, complete, and delete a task — it should 
 
 ```
 Project/
-├── backend/                   # Express + Mongoose REST API
+├── netlify.toml                 # Netlify build + functions + redirects config
+├── backend/                     # Express + Mongoose REST API
 │   ├── src/
+│   │   ├── app.js                # Express app (routes, middleware) — no listen()
+│   │   ├── server.js             # Local dev entry point: connects Mongo + app.listen()
 │   │   ├── controllers/taskController.js
 │   │   ├── models/Task.js
-│   │   ├── routes/taskRoutes.js
-│   │   └── server.js
+│   │   └── routes/taskRoutes.js
+│   ├── netlify/functions/api.js  # Wraps app.js as a Netlify serverless function
 │   ├── .env.example
 │   └── package.json
-└── frontend/                   # Angular 19 standalone app
+└── frontend/                     # Angular 19 standalone app
     └── src/app/
         ├── task.ts              # Task interface
         ├── task.service.ts      # HTTP calls to the API
