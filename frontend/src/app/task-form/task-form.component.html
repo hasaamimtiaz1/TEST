@@ -1,0 +1,29 @@
+<div class="task-form">
+  <h1>{{ isEditMode ? 'Edit Task' : 'New Task' }}</h1>
+
+  <p *ngIf="loading">Loading...</p>
+
+  <form *ngIf="!loading" (ngSubmit)="save()">
+    <label>
+      Title
+      <input type="text" name="title" [(ngModel)]="task.title" required />
+    </label>
+
+    <label>
+      Description
+      <textarea name="description" [(ngModel)]="task.description" rows="4"></textarea>
+    </label>
+
+    <label *ngIf="isEditMode" class="checkbox-label">
+      <input type="checkbox" name="completed" [(ngModel)]="task.completed" />
+      Completed
+    </label>
+
+    <p *ngIf="error" class="error">{{ error }}</p>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="button" class="btn" (click)="cancel()">Cancel</button>
+    </div>
+  </form>
+</div>

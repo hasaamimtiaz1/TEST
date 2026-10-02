@@ -1,0 +1,33 @@
+<div class="task-list">
+  <div class="header">
+    <h1>Tasks</h1>
+    <a routerLink="/tasks/new" class="btn btn-primary">+ New Task</a>
+  </div>
+
+  <p *ngIf="loading">Loading tasks...</p>
+  <p *ngIf="error" class="error">{{ error }}</p>
+
+  <ul *ngIf="!loading && tasks.length" class="tasks">
+    <li *ngFor="let task of tasks" [class.completed]="task.completed">
+      <label class="checkbox">
+        <input
+          type="checkbox"
+          [checked]="task.completed"
+          (change)="toggleCompleted(task)"
+        />
+      </label>
+      <div class="task-info">
+        <strong>{{ task.title }}</strong>
+        <p *ngIf="task.description">{{ task.description }}</p>
+      </div>
+      <div class="actions">
+        <a [routerLink]="['/tasks', task._id, 'edit']" class="btn btn-small">Edit</a>
+        <button class="btn btn-small btn-danger" (click)="deleteTask(task._id!)">
+          Delete
+        </button>
+      </div>
+    </li>
+  </ul>
+
+  <p *ngIf="!loading && !tasks.length && !error">No tasks yet. Create one!</p>
+</div>
